@@ -1,7 +1,7 @@
 # dsh-better-retry 🔁
 
-> A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) Cordis plugin that retries **any** model-request failure — whatever the error code — with durable, backoff-scheduled retries, plus a **Settings → General slider** to tune the retry budget live (0–64, default 8).
-> 一个 DSH（DeepSeek Harness）Cordis 插件：无论报什么错都自动重试模型请求（持久化 + 指数退避），并在 设置 → 常规 里提供滑块实时调整重试次数（0–64，默认 8）。
+> A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) Cordis plugin that retries **any** model-request failure — whatever the error code — with durable, backoff-scheduled retries, plus **Settings → General sliders** to tune the retry budget (0–64, default 8) and the 429 wait (5–120 s, default 15 s) live.
+> 一个 DSH（DeepSeek Harness）Cordis 插件：无论报什么错都自动重试模型请求（持久化 + 指数退避），并在 设置 → 常规 里提供滑块实时调整重试次数（0–64，默认 8）与 429 等待时长（5–120 秒，默认 15 秒）。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DSH](https://img.shields.io/badge/DSH-Cordis%20Plugin-blueviolet)](https://github.com/deepseek-ai/deepseek-harness)
@@ -14,7 +14,7 @@ The stock `dsh-llm-retry` plugin only retries failures whose code appears in the
 
 - **Any error code** — retries every failure class, capped by your budget.
 - **Durable & visible** — appends the same `llm/retry` / `llm/retry-started` events as the stock plugin, so the chat UI shows "正在重试模型请求（n/N）· Xs" and sessions stay replay-safe.
-- **Slider in Settings** — Settings → General → "失败重试次数 / Failure retries": 0–64, default 8, persisted to `settings.yaml`, applies to the *next* failure with no restart.
+- **Sliders in Settings** — Settings → General → "失败重试次数 / Failure retries" (0–64, default 8) and "429 等待（秒） / 429 wait (s)" (5–120, default 15), persisted to `settings.yaml`, apply to the *next* failure with no restart.
 - **Two deliberate exceptions** — `ABORTED` (user cancel) and `CONTEXT_WINDOW_EXCEEDED` (handled by the compaction plugin) are never retried.
 - **Plays well with stock retry** — a downstream retry/compaction decision always wins; this plugin only recovers failures nobody else claimed.
 
@@ -22,7 +22,7 @@ The stock `dsh-llm-retry` plugin only retries failures whose code appears in the
 
 | Half | Role |
 | --- | --- |
-| **Host** (`lib/index.js`) | Listens on the agent loop's `agent/request-error` waterfall. For any failure not in the never-retry set and not already recovered downstream, it appends a durable `llm/retry` event, waits out exponential backoff (500 ms → 10 s cap, 10% jitter, honors provider `Retry-After` within the cap), appends `llm/retry-started`, and returns `{ kind: "retry" }` so the loop re-issues the request. The budget lives in the `dsh-better-retry` settings namespace (`maxRetries`, default 8, max 64), hot-reloaded per change. |
+| **Host** (`lib/index.js`) | Listens on the agent loop's `agent/request-error` waterfall. For any failure not in the never-retry set and not already recovered downstream, it appends a durable `llm/retry` event, waits out exponential backoff (500 ms → 10 s cap, 10% jitter) — or, for a failure carrying `Retry-After` (429 rate-limit/quota), the server-requested wait clamped into the user's 429 window [5 s, `retryAfterMs`] — appends `llm/retry-started`, and returns `{ kind: "retry" }` so the loop re-issues the request. The settings live in the `dsh-better-retry` namespace (`maxRetries` default 8 max 64, `retryAfterMs` default 15 s range 5–120 s), hot-reloaded per change. |
 | **Client** (`lib/client.js`) | Registers one `settings.general.item` row: a range slider bound to `settings.describe` / `settings.mutate` with revision fencing — every release writes `dsh-better-retry.maxRetries` into `settings.yaml` immediately. |
 
 ```
@@ -69,11 +69,13 @@ Full step-by-step (including upgrades and rollback) is in [`docs/INSTALL.md`](do
 | Where | What | Default | Range |
 | --- | --- | --- | --- |
 | Settings → General → 失败重试次数 | `dsh-better-retry.maxRetries` | 8 | 0–64 |
-| `~/.dsh/settings.yaml` → `dsh-better-retry:` → `maxRetries` | same, hand-editable | 8 | 0–64 |
+| Settings → General → 429 等待（秒） | `dsh-better-retry.retryAfterMs` | 15 s | 5–120 s |
+| `~/.dsh/settings.yaml` → `dsh-better-retry:` → `maxRetries` / `retryAfterMs` | same, hand-editable | 8 / 15000 ms | 0–64 / 5000–120000 ms |
 
 - `0` disables the any-code retry entirely (stock policy still applies).
 - Changes apply to the **next** failure; an in-flight retry chain keeps the budget it started with (the chain's `policyKey` embeds the budget).
-- Backoff: 500 ms initial, doubling, 10 s cap, ±10% jitter; a provider `Retry-After` within the cap overrides the computed delay, above the cap the retry is skipped.
+- Backoff: 500 ms initial, doubling, 10 s cap, ±10% jitter.
+- A provider `Retry-After` (429 quota/rate-limit) is honored as the wait, clamped into `[5 s, retryAfterMs]` — never skipped, so quota errors are retried up to the budget (e.g. 60 s Retry-After with the default 15 s cap waits 15 s per retry).
 
 ## ⚠️ Notes / 说明
 

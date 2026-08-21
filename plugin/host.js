@@ -106,14 +106,15 @@ return {
         if (previousRetry >= MAX_RETRIES) return downstream.decision
         var retry = previousRetry + 1
         var id = prior ? prior.data.retryId : retryId()
-        // Honor provider Retry-After without giving up when it is long: 429
-        // quota/rate-limit responses routinely ask for 60s+, and the point of
-        // this plugin is to retry every failure. Wait exactly what the server
-        // asked (bounded only by the global timer cap ~24.8 days).
-        var MAX_TIMER_DELAY_MS = 2147483647
+        // Honor provider Retry-After clamped to the fixed dynamic-mode window
+        // [5s, 15s] (the static install lets the user set 5–120s via slider).
+        // 429 quota/rate-limit responses routinely ask for 60s+; we still
+        // retry, waiting at least 5s and at most 15s.
+        var MIN_RETRY_AFTER_MS = 5000
+        var MAX_RETRY_AFTER_MS = 15000
         var delayMs
         if (failure.providerRetryAfterMs !== undefined && Number.isFinite(failure.providerRetryAfterMs) && failure.providerRetryAfterMs > 0) {
-          delayMs = Math.min(failure.providerRetryAfterMs, MAX_TIMER_DELAY_MS)
+          delayMs = Math.min(Math.max(failure.providerRetryAfterMs, MIN_RETRY_AFTER_MS), MAX_RETRY_AFTER_MS)
         } else {
           delayMs = localDelay(retry)
         }

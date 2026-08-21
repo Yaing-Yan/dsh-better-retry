@@ -14,13 +14,10 @@
 // -----------------------------------------------------------------------------
 
 return {
+  inject: ['slots', 'locale', 'connection'],
   apply(ctx) {
     var slots = ctx.get('slots')
     if (slots === undefined) return
-    var connection = ctx.get('connection')
-    var api = connection && connection.api
-    if (api === undefined) return
-
     var SETTINGS_NS = 'dsh-better-retry'
 
     var disposeStyles = styles.insert(
@@ -34,7 +31,8 @@ return {
       '.dbr-slider:disabled{opacity:.4;cursor:default}'
     )
 
-    var disposeLocale = ctx.locale && ctx.locale.register('dsh-better-retry', {
+    var locale = ctx.get('locale')
+    var disposeLocale = locale && locale.register('dsh-better-retry', {
       zh: {
         'retry.title': '失败重试次数',
         'retry.description': '模型请求失败时的自动重试次数（任意错误类型，0–64，默认 8；上下文超限与用户中止除外）。动态插件模式下固定为 8。',
@@ -49,23 +47,25 @@ return {
       },
     })
 
+    var CONFIG_URL = '/dsh-better-retry/config'
+
     function readSettings() {
-      return api.settings.describe({}).then(function (response) {
-        if (!response.result.ok) throw new Error(response.result.error.message)
-        var view = response.result.value.namespaces.find(function (entry) { return entry.ns === SETTINGS_NS })
-        if (view === undefined) return { available: false, writable: false }
-        return { available: true, writable: response.result.value.writable !== false, value: view.value, revision: view.revision }
+      return fetch(CONFIG_URL, { method: 'GET' }).then(function (response) {
+        if (!response.ok) throw new Error('config route unavailable')
+        return response.json()
+      }).then(function (section) {
+        return { available: true, writable: true, value: section }
       })
     }
 
-    function writeField(revision, field, value) {
-      return api.settings.mutate({
-        ns: SETTINGS_NS,
-        ops: [{ op: 'set', path: [field], value: value }],
-        expectedRevision: revision,
+    function writeField(field, value) {
+      return fetch(CONFIG_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ field: field, value: value }),
       }).then(function (response) {
-        if (!response.result.ok) throw new Error(response.result.error.message)
-        return response.result.value
+        if (!response.ok) throw new Error('write refused')
+        return response.json()
       })
     }
 
@@ -106,10 +106,10 @@ return {
           var stored = spec.toValue(clamped)
           setSnapshot(function (prev) { return { status: 'ready', value: stored, writable: prev.writable, revision: prev.revision } })
           var gen = ++generation.current
-          writeField(snapshot.revision, spec.field, stored).then(function (view) {
+          writeField(spec.field, stored).then(function (section) {
             if (gen !== generation.current) return
-            var raw = view.value && typeof view.value[spec.field] === 'number' ? view.value[spec.field] : stored
-            setSnapshot({ status: 'ready', value: raw, writable: true, revision: view.revision })
+            var raw = section && typeof section[spec.field] === 'number' ? section[spec.field] : stored
+            setSnapshot({ status: 'ready', value: raw, writable: true, revision: undefined })
           }).catch(function () {})
         }
 

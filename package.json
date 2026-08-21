@@ -1,6 +1,6 @@
 {
   "name": "dsh-better-retry",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "DSH (DeepSeek Harness) Cordis plugin: retry ANY model-request failure (any error code) with exponential backoff — retry budget adjustable from Settings → General via a slider (0–64, default 8).",
   "keywords": [
     "dsh",
@@ -36,7 +36,6 @@
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-settings-general",
-        "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-locale"
       ]
     }

@@ -23,7 +23,7 @@ The stock `dsh-llm-retry` plugin only retries failures whose code appears in the
 | Half | Role |
 | --- | --- |
 | **Host** (`lib/index.js`) | Listens on the agent loop's `agent/request-error` waterfall. For any failure not in the never-retry set and not already recovered downstream, it appends a durable `llm/retry` event, waits out exponential backoff (500 ms → 10 s cap, 10% jitter) — or, for a failure carrying `Retry-After` (429 rate-limit/quota), the server-requested wait clamped into the user's 429 window [5 s, `retryAfterMs`] — appends `llm/retry-started`, and returns `{ kind: "retry" }` so the loop re-issues the request. The settings live in the `dsh-better-retry` namespace (`maxRetries` default 8 max 64, `retryAfterMs` default 15 s range 5–120 s), hot-reloaded per change. |
-| **Client** (`lib/client.js`) | Registers one `settings.general.item` row: a range slider bound to `settings.describe` / `settings.mutate` with revision fencing — every release writes `dsh-better-retry.maxRetries` into `settings.yaml` immediately. |
+| **Client** (`lib/client.js`) | Registers two `settings.general.item` rows: range sliders that read/write the Host half's same-origin route `/dsh-better-retry/config` (the settings wire API only serves apiproxy-allowlisted namespaces, so the Host serves its own route through the settings service) — every release persists `dsh-better-retry.maxRetries` / `retryAfterMs` into `settings.yaml` immediately. |
 
 ```
 model request fails (any code)

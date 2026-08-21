@@ -1,0 +1,14 @@
+{
+  "name": "dsh-better-retry",
+  "description": "DSH (DeepSeek Harness) plugin: retry any model-request failure with a Settings-slider-adjustable budget (0–64, default 8).",
+  "version": "1.0.0",
+  "entry": {
+    "name": "dsh-better-retry",
+    "inject": [
+      "agents"
+    ]
+  },
+  "client": {
+    "platform": "web"
+  }
+}
